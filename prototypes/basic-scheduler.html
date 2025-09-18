@@ -1,1 +1,164 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scheduler Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;     /* slate-900 */
+      --card: #111827;   /* gray-900 */
+      --text: #e5e7eb;   /* gray-200 */
+      --accent: #60a5fa; /* blue-400 */
+      --accent-2: #93c5fd; /* blue-300 */
+      --border: #1f2937; /* gray-800 */
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 600px at 10% -10%, #1e293b, transparent 70%),
+                  radial-gradient(800px 600px at 110% 10%, #111827, transparent 70%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100svh;
+      display: grid; place-items: center;
+    }
+
+    .card {
+      width: min(92vw, 560px);
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06);
+      backdrop-filter: blur(6px);
+    }
+
+    h1 { font-size: 1.35rem; margin: 0 0 12px; letter-spacing: .2px; }
+    p { margin: 0 0 20px; color: #cbd5e1; }
+
+    .btn {
+      appearance: none; border: 0; cursor: pointer;
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: 12px 16px; border-radius: 12px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      color: #0b1220; font-weight: 650; letter-spacing: .2px;
+      box-shadow: 0 8px 18px rgba(96,165,250,.4);
+      transition: transform .08s ease, filter .2s ease, box-shadow .2s ease;
+    }
+    .btn:focus-visible { outline: 3px solid #bfdbfe; outline-offset: 2px; }
+    .btn:hover { filter: brightness(1.05); box-shadow: 0 10px 24px rgba(96,165,250,.45); }
+    .btn:active { transform: translateY(1px); }
+
+    /* Dialog (calendar) */
+    dialog {
+      width: min(92vw, 420px);
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 0; color: var(--text);
+      background: var(--card);
+      box-shadow: 0 18px 50px rgba(0,0,0,.45);
+      animation: pop .18s ease-out;
+    }
+    @keyframes pop { from { transform: translateY(6px) scale(.98); opacity: 0 } }
+
+    dialog::backdrop { background: rgba(2,6,23,.6); backdrop-filter: blur(2px); }
+
+    .dlg-head { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; align-items:center; justify-content: space-between; }
+    .dlg-body { padding: 18px; }
+    .row { display:flex; gap: 12px; align-items:center; }
+    label { font-size:.95rem; color:#cbd5e1; }
+    input[type="date"], input[type="time"] {
+      width: 100%;
+      padding: 12px 14px; border-radius: 12px;
+      background: #0b1220; color: var(--text);
+      border: 1px solid #263244;
+    }
+
+    .dlg-actions { display:flex; justify-content: flex-end; gap: 10px; padding: 16px 18px; border-top:1px solid var(--border); }
+
+    .ghost { background: transparent; border: 1px solid #334155; color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <h1>Mini Scheduler</h1>
+    <p>A tiny demo with a button that opens a calendar picker.</p>
+    <button id="openScheduler" class="btn" aria-haspopup="dialog" aria-controls="schedulerDialog">📅 Scheduler</button>
+  </main>
+
+  <!-- Calendar Dialog -->
+  <dialog id="schedulerDialog" aria-labelledby="dlgTitle">
+    <div class="dlg-head">
+      <strong id="dlgTitle">Choose a date</strong>
+      <button id="closeDialog" class="btn ghost" aria-label="Close dialog">✕</button>
+    </div>
+    <div class="dlg-body">
+      <div class="row" style="margin-bottom:12px;">
+        <label for="date">Date</label>
+        <input id="date" name="date" type="date" />
+      </div>
+      <div class="row">
+        <label for="time">Optional time</label>
+        <input id="time" name="time" type="time" />
+      </div>
+    </div>
+    <div class="dlg-actions">
+      <button id="save" class="btn">Save</button>
+    </div>
+  </dialog>
+
+  <script>
+    const openBtn = document.getElementById('openScheduler');
+    const dlg = document.getElementById('schedulerDialog');
+    const closeBtn = document.getElementById('closeDialog');
+    const saveBtn = document.getElementById('save');
+    const dateInput = document.getElementById('date');
+
+    // Open dialog and focus the date picker so the native calendar pops immediately on many browsers
+    openBtn.addEventListener('click', () => {
+      if (typeof dlg.showModal === 'function') {
+        dlg.showModal();
+        // slight delay to ensure dialog is fully rendered before focusing
+        setTimeout(() => dateInput.focus({preventScroll:true}), 0);
+      } else {
+        alert('Your browser does not support <dialog>.');
+      }
+    });
+
+    // Close handlers
+    closeBtn.addEventListener('click', () => dlg.close());
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); dlg.close(); }); // Esc key
+    dlg.addEventListener('click', (e) => { // click outside to close
+      const rect = dlg.getBoundingClientRect();
+      const inDialog = (
+        rect.top <= e.clientY && e.clientY <= rect.bottom &&
+        rect.left <= e.clientX && e.clientX <= rect.right
+      );
+      if (!inDialog) dlg.close();
+    });
+
+    // Demo save action
+    saveBtn.addEventListener('click', () => {
+      const date = dateInput.value;
+      const time = document.getElementById('time').value;
+      if (!date) {
+        alert('Please pick a date.');
+        return;
+      }
+      const msg = time ? `Scheduled: ${date} at ${time}` : `Scheduled: ${date}`;
+      alert(msg);
+      dlg.close();
+    });
+
+    // Optional: set min date to today
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    dateInput.min = `${yyyy}-${mm}-${dd}`;
+  </script>
+</body>
+</html>
