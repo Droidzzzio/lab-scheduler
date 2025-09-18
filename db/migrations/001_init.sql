@@ -1,165 +1,138 @@
--- Enable useful extensions (optional)
-CREATE EXTENSION IF NOT EXISTS pgcrypto; -- for digest/uuid if needed
+```sql
+-- MySQL 8.0 schema for Lab Scheduler (IST at app layer; store DATETIME in UTC or IST consistently)
+SET NAMES utf8mb4;
+SET time_zone = '+00:00'; -- recommended to store UTC; app converts to IST
 
--- Enums
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN
-    CREATE TYPE user_status AS ENUM ('pending','approved','rejected');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-    CREATE TYPE user_role AS ENUM ('student','trainer','admin');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_track') THEN
-    CREATE TYPE user_track AS ENUM ('security','datacenter');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'resource_kind') THEN
-    CREATE TYPE resource_kind AS ENUM ('rack');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_status') THEN
-    CREATE TYPE booking_status AS ENUM ('confirmed','cancelled');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'blackout_type') THEN
-    CREATE TYPE blackout_type AS ENUM ('date','weekly');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'module_type') THEN
-    CREATE TYPE module_type AS ENUM ('Nexus','UCS','ACI');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'approval_status') THEN
-    CREATE TYPE approval_status AS ENUM ('pending','approved','rejected');
-  END IF;
-END $$;
-
--- Users
 CREATE TABLE IF NOT EXISTS users (
-  id            BIGSERIAL PRIMARY KEY,
-  username      TEXT NOT NULL,
-  email         TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  status        user_status NOT NULL DEFAULT 'pending',
-  role          user_role   NOT NULL DEFAULT 'student',
-  track         user_track  NULL,
-  exam_date     DATE NULL,
-  credits       INTEGER NULL,
-  timezone      TEXT NOT NULL DEFAULT 'Asia/Kolkata',
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  username VARCHAR(191) NOT NULL,
+  email VARCHAR(191) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  role ENUM('student','trainer','admin') NOT NULL DEFAULT 'student',
+  track ENUM('security','datacenter') NULL,
+  exam_date DATE NULL,
+  credits INT NULL,
+  timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Kolkata',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_users_username (username),
+  UNIQUE KEY uq_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Case-insensitive uniqueness for username/email
-CREATE UNIQUE INDEX IF NOT EXISTS users_username_unique ON users (lower(username));
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique    ON users (lower(email));
-
--- Resources (racks)
 CREATE TABLE IF NOT EXISTS resources (
-  id             BIGSERIAL PRIMARY KEY,
-  name           TEXT NOT NULL UNIQUE,
-  track          user_track NOT NULL,
-  kind           resource_kind NOT NULL DEFAULT 'rack',
-  capacity       INTEGER NOT NULL DEFAULT 1,
-  active         BOOLEAN NOT NULL DEFAULT TRUE,
-  attributes_json JSONB NOT NULL DEFAULT '{}',
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(191) NOT NULL,
+  track ENUM('security','datacenter') NOT NULL,
+  kind ENUM('rack') NOT NULL DEFAULT 'rack',
+  capacity INT NOT NULL DEFAULT 1,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  attributes_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_resources_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Track policies (slot length, credits per slot, starting credits)
 CREATE TABLE IF NOT EXISTS track_policies (
-  track              user_track PRIMARY KEY,
-  slot_length_minutes INTEGER NOT NULL,
-  credits_per_slot    INTEGER NOT NULL,
-  starting_credits    INTEGER NOT NULL
-);
+  track ENUM('security','datacenter') NOT NULL,
+  slot_length_minutes INT NOT NULL,
+  credits_per_slot INT NOT NULL,
+  starting_credits INT NOT NULL,
+  PRIMARY KEY (track)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Bookings
 CREATE TABLE IF NOT EXISTS bookings (
-  id            BIGSERIAL PRIMARY KEY,
-  user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  resource_id   BIGINT NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
-  date          DATE NOT NULL,
-  slot_idx      SMALLINT NOT NULL, -- 0..7 or 0..5 depending on track policy
-  start_ts      TIMESTAMPTZ NOT NULL,
-  end_ts        TIMESTAMPTZ NOT NULL,
-  status        booking_status NOT NULL DEFAULT 'confirmed',
-  module        module_type NULL, -- only for Data Center
-  attributes_json JSONB NOT NULL DEFAULT '{}',
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  cancelled_at  TIMESTAMPTZ NULL,
-  cancelled_by  BIGINT NULL REFERENCES users(id)
-);
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  resource_id BIGINT UNSIGNED NOT NULL,
+  date DATE NOT NULL,
+  slot_idx SMALLINT NOT NULL,
+  start_ts DATETIME NOT NULL,
+  end_ts DATETIME NOT NULL,
+  status ENUM('confirmed','cancelled') NOT NULL DEFAULT 'confirmed',
+  module ENUM('Nexus','UCS','ACI') NULL,
+  attributes_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cancelled_at DATETIME NULL,
+  cancelled_by BIGINT UNSIGNED NULL,
+  PRIMARY KEY (id),
+  KEY idx_bookings_user (user_id),
+  KEY idx_bookings_resource (resource_id),
+  CONSTRAINT fk_bookings_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bookings_resource FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bookings_cancelled_by FOREIGN KEY (cancelled_by) REFERENCES users(id) ON DELETE SET NULL,
+  -- Enforce only one CONFIRMED booking per resource/date/slot
+  UNIQUE KEY uq_booking_slot_confirmed (resource_id, date, slot_idx, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Prevent double booking per resource/date/slot for confirmed bookings only
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_booking_slot
-  ON bookings(resource_id, date, slot_idx)
-  WHERE status = 'confirmed';
-
--- Blackouts
 CREATE TABLE IF NOT EXISTS blackouts (
-  id          BIGSERIAL PRIMARY KEY,
-  resource_id BIGINT NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
-  type        blackout_type NOT NULL,
-  date        DATE NULL,
-  weekly_dow  SMALLINT NULL, -- 0=Sun..6=Sat
-  slot_idx    SMALLINT NULL,
-  reason      TEXT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  resource_id BIGINT UNSIGNED NOT NULL,
+  type ENUM('date','weekly') NOT NULL,
+  date DATE NULL,
+  weekly_dow TINYINT NULL, -- 0=Sun..6=Sat
+  slot_idx SMALLINT NULL,
+  reason VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_blackouts_resource (resource_id),
+  CONSTRAINT fk_blackouts_resource FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Credit ledger (authoritative credits history)
 CREATE TABLE IF NOT EXISTS credit_ledger (
-  id         BIGSERIAL PRIMARY KEY,
-  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  booking_id BIGINT NULL REFERENCES bookings(id) ON DELETE SET NULL,
-  delta      INTEGER NOT NULL,
-  reason     TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  booking_id BIGINT UNSIGNED NULL,
+  delta INT NOT NULL,
+  reason VARCHAR(191) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_ledger_user (user_id),
+  KEY idx_ledger_booking (booking_id),
+  CONSTRAINT fk_ledger_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ledger_booking FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Approvals
 CREATE TABLE IF NOT EXISTS approvals (
-  id                 BIGSERIAL PRIMARY KEY,
-  user_id            BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-  requested_track    user_track NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  requested_track ENUM('security','datacenter') NOT NULL,
   requested_exam_date DATE NOT NULL,
-  status             approval_status NOT NULL DEFAULT 'pending',
-  decided_by         BIGINT NULL REFERENCES users(id) ON DELETE SET NULL,
-  decided_at         TIMESTAMPTZ NULL,
-  note               TEXT NULL,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  decided_by BIGINT UNSIGNED NULL,
+  decided_at DATETIME NULL,
+  note VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_approvals_user (user_id),
+  CONSTRAINT fk_approvals_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_approvals_decider FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Audit log
 CREATE TABLE IF NOT EXISTS audit_log (
-  id            BIGSERIAL PRIMARY KEY,
-  actor_user_id BIGINT NULL REFERENCES users(id) ON DELETE SET NULL,
-  action        TEXT NOT NULL,
-  target_type   TEXT NOT NULL,
-  target_id     BIGINT NULL,
-  meta_json     JSONB NOT NULL DEFAULT '{}',
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  actor_user_id BIGINT UNSIGNED NULL,
+  action VARCHAR(191) NOT NULL,
+  target_type VARCHAR(64) NOT NULL,
+  target_id BIGINT UNSIGNED NULL,
+  meta_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_audit_actor (actor_user_id),
+  CONSTRAINT fk_audit_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- ICS tokens (for calendar feeds)
 CREATE TABLE IF NOT EXISTS ics_tokens (
-  id         BIGSERIAL PRIMARY KEY,
-  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  revoked_at TIMESTAMPTZ NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS ics_tokens_user_token
-  ON ics_tokens(user_id, token_hash);
-
--- Triggers to keep updated_at fresh
-CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
-BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'users_updated_at_trg') THEN
-    CREATE TRIGGER users_updated_at_trg BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'resources_updated_at_trg') THEN
-    CREATE TRIGGER resources_updated_at_trg BEFORE UPDATE ON resources
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-  END IF;
-END $$;
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  token_hash VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  revoked_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_ics_user (user_id),
+  UNIQUE KEY uq_ics_user_token (user_id, token_hash),
+  CONSTRAINT fk_ics_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
