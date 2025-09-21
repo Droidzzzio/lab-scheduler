@@ -22,3 +22,18 @@ ob_start(); ?>
 <?php endif; ?>
 </section>
 <?php $content = ob_get_clean(); render_layout('Admin', $content); ?>
+<?php render_layout('Admin — Approvals', function () use ($pending) { ?>
+  <h1>Admin — Approvals</h1>
+  <?php if (empty($pending)) { ?>
+    <p>No pending approvals.</p>
+  <?php } else { ?>
+    <?php foreach ($pending as $a): ?>
+      <form method="post" action="?route=approve" class="row">
+        <div>Request: <b><?= h($a['username']) ?></b></div>
+        <input type="hidden" name="approval_id" value="<?= h($a['id']) ?>">
+        <button class="btn" type="submit">Approve</button>
+      </form>
+    <?php endforeach; ?>
+  <?php } ?>
+<?php }); ?>
+

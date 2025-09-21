@@ -1,0 +1,8 @@
+[20-Sep-2025 16:26:22 UTC] Login failed for 'admin' (bad creds).
+[20-Sep-2025 16:26:31 UTC] Login failed for 'admin' (bad creds).
+[20-Sep-2025 16:26:35 UTC] Login failed for 'admin' (bad creds).
+[20-Sep-2025 16:26:40 UTC] Login failed for 'admin' (bad creds).
+[20-Sep-2025 16:32:24 UTC] Login OK for user_id=4, role=admin.
+[20-Sep-2025 16:32:39 UTC] Login OK for user_id=4, role=admin.
+[20-Sep-2025 16:39:04 UTC] Login OK for user_id=4, role=admin.
+[20-Sep-2025 16:56:32 UTC] Login OK for user_id=4, role=admin.

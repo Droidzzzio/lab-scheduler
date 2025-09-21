@@ -1,4 +1,3 @@
-```sql
 -- MySQL 8.0 schema for Lab Scheduler (IST at app layer; store DATETIME in UTC or IST consistently)
 SET NAMES utf8mb4;
 SET time_zone = '+00:00'; -- recommended to store UTC; app converts to IST
@@ -135,4 +134,3 @@ CREATE TABLE IF NOT EXISTS ics_tokens (
   UNIQUE KEY uq_ics_user_token (user_id, token_hash),
   CONSTRAINT fk_ics_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-```
