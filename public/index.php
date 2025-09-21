@@ -1,4 +1,7 @@
 <?php
+ob_start();
+require_once __DIR__ . '/../app/bootstrap.php';   // <-- adjust path/name to your actual bootstrap
+
 // strict dev mode (optional while debugging)
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -12,11 +15,6 @@ $action = $_POST['action'] ?? null;
 $ok = $ok ?? false;
 $msg = $msg ?? '';
 $flash = null;
-
-// include your app bootstrap so DB::$pdo, Booking, tz_ist(), require_login(), is_admin() exist
-require_once __DIR__ . '/../app/bootstrap.php';   // <-- adjust path/name to your actual bootstrap
-ob_start();
-
 $flash = $ok? 'Booked!' : ('Error: '.$msg);
 
 {
@@ -130,6 +128,53 @@ if ($route === 'register') {
     exit;
 }
 
+//FORGOT PASSWORD
+if ($route === 'forgot') {
+    if (($_POST['action'] ?? '') === 'forgot') {
+        $login = trim($_POST['login'] ?? ''); // username or email
+        $u = DB::$pdo->prepare("SELECT id,email FROM users WHERE username=:x OR email=:x LIMIT 1");
+        $u->execute([':x'=>$login]); $user = $u->fetch();
+
+        // Always act like it worked (don’t leak if account exists)
+        if ($user) {
+            $token = bin2hex(random_bytes(32));
+            $exp   = (new DateTime('+1 hour', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+            DB::$pdo->prepare("INSERT INTO password_resets(user_id,token,expires_at) VALUES(:uid,:t,:exp)")
+                    ->execute([':uid'=>$user['id'], ':t'=>$token, ':exp'=>$exp]);
+            // DEV: show link on screen + log it; in prod send email
+            $flash = "We’ve sent a reset link. DEV: <a href='?route=reset&token=$token'>Reset now</a>";
+            error_log("Password reset for user_id={$user['id']}: token=$token");
+        } else {
+            $flash = "We’ve sent a reset link if the account exists.";
+        }
+    }
+    require __DIR__.'/../views/forgot.php'; exit;
+}
+//reset password
+if ($route === 'reset') {
+    $token = $_GET['token'] ?? '';
+    $row = DB::$pdo->prepare("SELECT * FROM password_resets WHERE token=:t AND used_at IS NULL LIMIT 1");
+    $row->execute([':t'=>$token]); $reset = $row->fetch();
+
+    if (!$reset) { $flash = 'Invalid or used token.'; require __DIR__.'/../views/forgot.php'; exit; }
+
+    $expired = (new DateTime('now', new DateTimeZone('UTC'))) > new DateTime($reset['expires_at'], new DateTimeZone('UTC'));
+
+    if (($_POST['action'] ?? '') === 'do_reset' && !$expired) {
+        $pass = $_POST['password'] ?? '';
+        if (strlen($pass) < 8) { $flash = 'Use at least 8 characters.'; }
+        else {
+            $hash = password_hash($pass, PASSWORD_BCRYPT);
+            DB::$pdo->beginTransaction();
+            DB::$pdo->prepare("UPDATE users SET password_hash=:h WHERE id=:uid")->execute([':h'=>$hash, ':uid'=>$reset['user_id']]);
+            DB::$pdo->prepare("UPDATE password_resets SET used_at=NOW() WHERE id=:id")->execute([':id'=>$reset['id']]);
+            DB::$pdo->commit();
+            header('Location: ?route=login&reset=1'); exit;
+        }
+    }
+
+    require __DIR__.'/../views/reset.php'; exit;
+}
 
 // Home (track‑gated dashboards)
 require_login();
