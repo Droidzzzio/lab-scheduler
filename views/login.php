@@ -10,6 +10,7 @@ render_layout('Login', function () { ?>
 
     <div class="actions">
       <button class="btn" type="submit" name="action" value="login">Sign in</button>
+      <a class="btn secondary" href="?route=forgot">Forgot password?</a>
     </div>
   </form>
 <?php }, $flash ?? null, 'login');

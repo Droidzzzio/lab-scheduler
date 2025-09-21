@@ -93,11 +93,12 @@ function now_utc(): DateTime {
  */
 
 
-function render_layout(string $title, $body, ?string $flash = null, string $active = 'home'): void {
-    // swallow any accidental echoes from includes (prevents random "Error:" on top-left)
-    if (ob_get_level() > 0 && ob_get_length() > 0) { @ob_clean(); }
 
-    // capture body if callable
+function render_layout(string $title, $body, ?string $flash = null, string $active = 'home'): void {
+    // swallow any accidental output before layout
+    if (ob_get_level() > 0) { @ob_clean(); }
+
+    // capture body if closure
     if (is_callable($body)) { ob_start(); $body(); $content = ob_get_clean(); }
     else { $content = (string)$body; }
 
@@ -111,7 +112,6 @@ function render_layout(string $title, $body, ?string $flash = null, string $acti
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
 <title>" . h($title) . "</title>
 <style>
-  /* ----- reset & tokens ----- */
   *,*::before,*::after{ box-sizing:border-box; }
   :root{
     --bg1:#0b1224; --bg2:#0a2b7a; --bg3:#000814;
@@ -132,7 +132,7 @@ function render_layout(string $title, $body, ?string $flash = null, string $acti
     background-attachment:fixed;
   }
 
-  /* ----- nav ----- */
+  /* top nav */
   .nav-wrap{ position:sticky; top:0; z-index:10; backdrop-filter:saturate(150%) blur(8px);
     background:linear-gradient(180deg, rgba(15,23,42,.65), rgba(15,23,42,.25));
     border-bottom:1px solid var(--border);
@@ -143,13 +143,13 @@ function render_layout(string $title, $body, ?string $flash = null, string $acti
   .tab{ padding:.5rem .9rem; border-radius:999px; text-decoration:none; color:var(--text);
     border:1px solid var(--border);
     background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-    box-shadow:var(--shadow); transition:.15s ease transform, .2s ease box-shadow, .2s ease border-color;
+    box-shadow:var(--shadow);
+    transition:.15s ease transform, .2s ease box-shadow, .2s ease border-color;
   }
   .tab:hover{ transform:translateY(-1px); border-color:rgba(96,165,250,.35); box-shadow:var(--shadow), 0 0 18px rgba(96,165,250,.25); }
   .tab.active{ border-color:rgba(96,165,250,.55); box-shadow:var(--shadow), 0 0 22px rgba(96,165,250,.35);
     background:linear-gradient(180deg, rgba(96,165,250,.08), rgba(96,165,250,.02)); }
 
-  /* ----- layout ----- */
   .container{ max-width:1100px; margin:2rem auto; padding:0 1rem; }
   .grid{ display:grid; grid-template-columns:1fr; justify-items:center; }
   .card{
@@ -159,7 +159,6 @@ function render_layout(string $title, $body, ?string $flash = null, string $acti
   }
   .card h1{ font-size:1.35rem; margin:.2rem 0 1rem; }
 
-  /* ----- forms ----- */
   form{ width:100%; margin:0; }
   label{ display:block; font-size:.9rem; color:var(--muted); margin:.65rem 0 .35rem; }
   input,select,button{
@@ -171,17 +170,26 @@ function render_layout(string $title, $body, ?string $flash = null, string $acti
   }
   input:focus,select:focus{ border-color:rgba(96,165,250,.55); box-shadow:0 0 0 3px rgba(96,165,250,.18); }
 
+  /* date picker contrast on dark */
+  input[type=\"date\"]{ color-scheme:dark; }
+  input[type=\"date\"]::-webkit-calendar-picker-indicator{
+    filter: invert(1) brightness(1.2) drop-shadow(0 0 6px rgba(96,165,250,.7)); opacity:.9;
+  }
+  input[type=\"date\"]::-webkit-datetime-edit,
+  input[type=\"date\"]::-webkit-datetime-edit-fields-wrapper,
+  input[type=\"date\"]::-webkit-datetime-edit-text,
+  input[type=\"date\"]::-webkit-datetime-edit-month-field,
+  input[type=\"date\"]::-webkit-datetime-edit-day-field,
+  input[type=\"date\"]::-webkit-datetime-edit-year-field{ color:var(--text); }
+
   .actions{ display:flex; gap:.6rem; justify-content:flex-end; margin-top:1rem; }
   .btn{ cursor:pointer; background:linear-gradient(180deg, rgba(59,130,246,.25), rgba(59,130,246,.15));
     border:1px solid rgba(96,165,250,.45); color:#fff; font-weight:600; letter-spacing:.2px; }
   .btn:hover{ transform:translateY(-1px); box-shadow:var(--shadow), 0 0 22px rgba(96,165,250,.35); }
 
-  /* ----- flash ----- */
   .flash{ margin:0 auto 1rem; max-width:520px; padding:.75rem 1rem; border-radius:12px;
-    background:linear-gradient(180deg, rgba(34,197,94,.12), rgba(34,197,94,.06));
-    border:1px solid rgba(34,197,94,.35); }
-  .flash.error{ background:linear-gradient(180deg, rgba(239,68,68,.12), rgba(239,68,68,.06));
-    border-color:rgba(239,68,68,.35); }
+    background:linear-gradient(180deg, rgba(34,197,94,.12), rgba(34,197,94,.06)); border:1px solid rgba(34,197,94,.35); }
+  .flash.error{ background:linear-gradient(180deg, rgba(239,68,68,.12), rgba(239,68,68,.06)); border-color:rgba(239,68,68,.35); }
 </style>
 </head>
 <body>
